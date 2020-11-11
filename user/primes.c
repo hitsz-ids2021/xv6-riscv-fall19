@@ -1,33 +1,69 @@
-#include "user/user.h"
 #include "kernel/types.h"
+#include "user/user.h"
 
-void main(){
-    int pid;
-    pid = fork();
-    int p[2];
-    int n=2;
-    int cur=2;
-
-    // if (pid == 0){
-
-    // } else if(pid > 0){
-    //     printf("prime: 2\n");
-    //     pipe(p);
-    //     if (++n % 2==0)
-    //     {
-    //         close(p[0]);
-    //         write(p[1],++n,5);
-    //         close(p[1]);
-    //         fork();
-    //     }
-    // } else {
-    //     printf("fork error!\n");
-    //     exit();
-    // }
-    
-    
+void
+close_pipe(int *p) {
+  close(p[0]);
+  close(p[1]);
 }
 
-int fetch(){
-    
+void
+primes() {
+  int n, p, len;
+  int fd[2];
+
+  // 从父进程读
+  if ((len = read(0, &n, sizeof(int))) <= 0 || n <= 0) {
+    close(1);
+    exit();
+  }
+  // write first prime to console
+  printf("prime %d\n", n);
+  
+  pipe(fd);
+
+  if (fork() == 0) {
+    close(0);
+    dup(fd[0]); 
+    close_pipe(fd);
+    primes();
+  } else {
+    close(1);
+    dup(fd[1]);
+    close_pipe(fd);
+    while ((len = read(0, &p, sizeof(int))) > 0 && p > 0) {
+      if (p % n != 0) {
+        write(1, &p, sizeof(int));
+      }
+    }
+    if (len <= 0 || p <= 0) {
+      close(1);
+      wait();   //wait for child process terminate
+      exit();
+    }
+  } 
+}
+
+int
+main(void) {
+  int i;
+  int fd[2];
+  
+  pipe(fd);
+  if (fork() == 0) {
+    close(0);
+    dup(fd[0]);
+    close_pipe(fd);
+    primes();
+  } else {
+    close(1);
+    dup(fd[1]);
+    close_pipe(fd);
+    for (i = 2; i <= 35; i++) {
+      write(1, &i, sizeof(int));
+    }
+    close(1);
+    wait();
+  }
+  exit();
 }

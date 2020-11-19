@@ -29,11 +29,12 @@ main(void) {
     static struct cmd cmd[MAX_CMD];
     int cmd_size = 0;
 
-    // read 
+    // read input
     while((cmd_size = ParseCmd(cmd, MAX_CMD, buf, sizeof buf)) >= 0) {
         if(cmd_size == 0) {
             continue;
         }
+        // error redirect
         if(!CheakRedirect(cmd, cmd_size)) {
             fprintf(2, "bad redirect!\n");
             continue;
@@ -46,10 +47,6 @@ main(void) {
 
 void 
 RunCmd(struct cmd *cmd, int size, int index) {
-    if(size == 0) {
-        return;
-    }
-
     if(size == 1) {
         if(fork() == 0) {
             ExecCmd(cmd[index]);
@@ -84,7 +81,8 @@ RunCmd(struct cmd *cmd, int size, int index) {
     return;
 }
 
-void ExecCmd(struct cmd cmd) {
+void 
+ExecCmd(struct cmd cmd) {
     if(cmd.input) {
         close(0);
         open(cmd.input, O_RDONLY);
@@ -112,12 +110,12 @@ ParseCmd(struct cmd *cmd, int cmd_size, char *buf, int buf_size) {
     if(real_buf_size > 1) {
         // replace '\n' with 0
         buf[real_buf_size-1] = 0;
-
         real_cmd_size = 1;
 
         char *x = buf;
         while(*x) {
             int cmd_index = real_cmd_size - 1;
+            // replace blank with 0
             while(*x && *x == ' ') {
                 *x = 0;
                 x++;
@@ -169,6 +167,7 @@ ParseCmd(struct cmd *cmd, int cmd_size, char *buf, int buf_size) {
                 }
             }
 
+            // catch pipe signal
             if(CharType(*x) == PIPE){
                 x++;
                 if(cmd[cmd_index].argc > 0) {
@@ -181,6 +180,7 @@ ParseCmd(struct cmd *cmd, int cmd_size, char *buf, int buf_size) {
         }
     }
 
+    // ignore invalid pipe
     if((real_cmd_size > 1) && cmd[real_cmd_size-1].argc < 1) {
         return real_cmd_size - 1;
     } else {

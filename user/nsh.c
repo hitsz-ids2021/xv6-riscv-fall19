@@ -18,7 +18,6 @@ struct cmd {
 };
 
 int ParseCmd(struct cmd *cmd, int cmd_size, char *buf, int buf_size);
-int CheakRedirect(struct cmd *cmd, int cmd_size);
 int CharType(char x);
 void RunCmd(struct cmd *cmd, int cmd_size, int index);
 void ExecCmd(struct cmd cmd);
@@ -34,14 +33,8 @@ main(void) {
         if(cmd_size == 0) {
             continue;
         }
-        // error redirect
-        if(!CheakRedirect(cmd, cmd_size)) {
-            fprintf(2, "bad redirect!\n");
-            continue;
-        }
         RunCmd(cmd, cmd_size, 0);
     }
-    // fprintf(2, "main will Never arrive here.\n");
     exit(0);
 }
 
@@ -58,6 +51,7 @@ RunCmd(struct cmd *cmd, int size, int index) {
     int p[2];
     pipe(p);
     
+    // output -> pipe
     if(fork() == 0) {
         close(1);
         dup(p[1]);
@@ -66,6 +60,7 @@ RunCmd(struct cmd *cmd, int size, int index) {
         ExecCmd(cmd[index]);
     }
 
+    // pipe -> input
     if(fork() == 0) {
         close(0);
         dup(p[0]);
@@ -91,10 +86,10 @@ ExecCmd(struct cmd cmd) {
         close(1);
         open(cmd.output, O_WRONLY | O_CREATE);
     }
-
     exec(cmd.args[0], cmd.args);
 }
 
+// deal with input strings
 int 
 ParseCmd(struct cmd *cmd, int cmd_size, char *buf, int buf_size) {
     int real_buf_size = 0;
@@ -114,12 +109,8 @@ ParseCmd(struct cmd *cmd, int cmd_size, char *buf, int buf_size) {
 
         char *x = buf;
         while(*x) {
+            int pipe_flag = 0;
             int cmd_index = real_cmd_size - 1;
-            // replace blank with 0
-            while(*x && *x == ' ') {
-                *x = 0;
-                x++;
-            }
 
             // init command
             cmd[cmd_index].argc = 0;
@@ -129,52 +120,35 @@ ParseCmd(struct cmd *cmd, int cmd_size, char *buf, int buf_size) {
                 cmd[cmd_index].args[i] = 0;
             }
 
-            // get the pointer to command
-            while(*x && CharType(*x) == ORDINARY) {
-                cmd[cmd_index].argc++;
-                cmd[cmd_index].args[cmd[cmd_index].argc-1] = x;
-                // skip
-                while(*x && CharType(*x) == ORDINARY) {
-                    x++;
-                }
-                // replace blank with 0
-                while(*x && CharType(*x) == BLANK) {
-                    *x = 0;
-                    x++;
-                }
-            }
-
-            // catch redirect signal
-            while(CharType(*x) == REDIRECT) {
-                char redirect = *x++;
-                while(*x && CharType(*x) == BLANK) {
-                    x++;
-                }
-                // distinguish input and output
-                if(redirect == '<') {
-                    cmd[cmd_index].input = x;
-                } else {
-                    cmd[cmd_index].output = x;
-                }
-                // skip
-                while(*x && CharType(*x) == ORDINARY) {
-                    x++;
-                }
-                // replace blank with 0
-                while(*x && CharType(*x) == BLANK) {
-                    *x = 0;
-                    x++;
-                }
-            }
-
-            // catch pipe signal
-            if(CharType(*x) == PIPE){
-                x++;
-                if(cmd[cmd_index].argc > 0) {
-                    real_cmd_size++;
-                } else {
-                    fprintf(2, "bad pipe\n");
-                    return 0;
+            // get args util meeting a pipe
+            while(*x && !pipe_flag) {
+                switch(*x) {
+                    case ' ':
+                        while(*x && *x == ' ') *x++ = 0;
+                        break;
+                    case '>':
+                        x++;
+                        while(*x && *x == ' ') *x++ = 0;
+                        cmd[cmd_index].output = x;
+                        while(*x && CharType(*x) == ORDINARY) x++;
+                        break;
+                    case '<':
+                        x++;
+                        while(*x && *x == ' ') *x++ = 0;
+                        cmd[cmd_index].input = x;
+                        while(*x && CharType(*x) == ORDINARY) x++;
+                        break;
+                    case '|':
+                        x++;
+                        real_cmd_size++;
+                        pipe_flag = 1;
+                        break;
+                    // oridinary character
+                    default:
+                        cmd[cmd_index].argc++;
+                        cmd[cmd_index].args[cmd[cmd_index].argc-1] = x;
+                        while(*x && CharType(*x) == ORDINARY) x++;
+                        break;
                 }
             }
         }
@@ -186,25 +160,6 @@ ParseCmd(struct cmd *cmd, int cmd_size, char *buf, int buf_size) {
     } else {
         return real_cmd_size;
     }
-}
-
-int 
-CheakRedirect(struct cmd *cmd, int cmd_size) {
-    if(cmd_size <= 1) {
-        return 1;
-    }
-    for(int i = 0; i < cmd_size; i++) {
-        if(i == 0 && cmd[i].output != 0) {
-            return 0;
-        }
-        if(i == cmd_size-1 && cmd[i].input != 0) {
-            return 0;
-        }
-        if((i != 0 && i != cmd_size-1) && (cmd[i].input != 0 || cmd[i].output != 0)) {
-            return 0;
-        }
-    }
-    return 1;
 }
 
 int

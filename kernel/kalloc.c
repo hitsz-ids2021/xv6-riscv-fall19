@@ -35,10 +35,12 @@ void
 freerange(void *pa_start, void *pa_end)
 {
   push_off();
+
   char *p;
   p = (char*)PGROUNDUP((uint64)pa_start);
   for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
     kfree(p);
+  
   pop_off();
 }
 
@@ -77,6 +79,7 @@ kalloc(void)
 {
   push_off();
   int id = cpuid();
+
   struct run *r;
 
   acquire(&kmem.lock[id]);
@@ -84,21 +87,24 @@ kalloc(void)
   if(r)
     kmem.freelist[id] = r->next;
   release(&kmem.lock[id]);
-  if (!r) {
-    for (int i = 0; i < NCPU; i++) {
+
+  if(!r) {
+    for(int i=0;i<NCPU;i++) {
       acquire(&kmem.lock[i]);
-      r = kmem.freelist[id];
-      if (r)
+      r = kmem.freelist[i];
+      if(r)
         kmem.freelist[i] = r->next;
       release(&kmem.lock[i]);
 
-      if (r) 
+      if(r)
         break;
     }
   }
+
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
   
   pop_off();
+
   return (void*)r;
 }

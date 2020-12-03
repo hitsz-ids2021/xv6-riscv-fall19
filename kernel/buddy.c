@@ -215,6 +215,7 @@ bd_free(void *p) {
 int
 blk_index_next(int k, char *p) {
   int n = (p - (char *) bd_base) / BLK_SIZE(k);
+  //p可能不与Block的边界对齐：n++
   if((p - (char*) bd_base) % BLK_SIZE(k) != 0)
       n++;
   return n ;
@@ -258,14 +259,17 @@ int
 bd_initfree_pair(int k, int bi, int direction) {
   int buddy = (bi % 2 == 0) ? bi+1 : bi-1;
   int free = 0;
-  if(bit_isset(bd_sizes[k].alloc, bi >> 1)) {
+  //如果bit_isset，说明有一边被使用，另一边free
+  //如果bit_isset=0，要么二者都空闲，要么二者都被使用；
+  //二者都空闲，则上一层必定是空闲；他们的Free必定已经被计数过。而且他们未被分割
+  if(bit_isset(bd_sizes[k].alloc, bi/2)) {
     free = BLK_SIZE(k);
-    // direction = 0, put right-hand block on free list
-    // direction = 1, put left-hand block
+    //direction为1，表明在处理右侧和无效区。将左侧的块加入free
+    //direction为0，表明在处理左侧和元信息。将右侧的块加入free
     if(bi % 2 == direction) 
-      lst_push(&bd_sizes[k].free, addr(k, buddy));   // put buddy on free list
+      lst_push(&bd_sizes[k].free, addr(k, buddy)); 
     else
-      lst_push(&bd_sizes[k].free, addr(k, bi));      // put bi on free list
+      lst_push(&bd_sizes[k].free, addr(k, bi));
   }
   return free;
 }
@@ -280,11 +284,14 @@ bd_initfree(void *bd_left, void *bd_right) {
   int free = 0;
 
   for (int k = 0; k < MAXSIZE; k++) {   // skip max size
+    //
     int left = blk_index_next(k, bd_left);
     int right = blk_index(k, bd_right);
+    //元信息分配在空间的头部：一定是左侧的block被分配
     free += bd_initfree_pair(k, left,0);
     if(right <= left)
       continue;
+    //无效区在空间的尾部：一定是右侧的block被分配
     free += bd_initfree_pair(k, right,1);
   }
   return free;

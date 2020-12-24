@@ -3,7 +3,7 @@
 #include "user/user.h"
 #include "kernel/fcntl.h"
 
-# define MAX_CMD 10
+# define MAX_CMD 10 // 针对管道
 
 # define ORDINARY 0
 # define REDIRECT 1
@@ -29,6 +29,7 @@ main(void) {
     int cmd_size = 0;
 
     // read input
+    // 分割字符
     while((cmd_size = ParseCmd(cmd, MAX_CMD, buf, sizeof buf)) >= 0) {
         if(cmd_size == 0) {
             continue;
@@ -40,6 +41,7 @@ main(void) {
 
 void 
 RunCmd(struct cmd *cmd, int size, int index) {
+    // 只有一条指令，直接执行
     if(size == 1) {
         if(fork() == 0) {
             ExecCmd(cmd[index]);
@@ -52,6 +54,7 @@ RunCmd(struct cmd *cmd, int size, int index) {
     pipe(p);
     
     // output -> pipe
+    // 创建一个子进程执行前半部分
     if(fork() == 0) {
         close(1);
         dup(p[1]);
@@ -61,6 +64,7 @@ RunCmd(struct cmd *cmd, int size, int index) {
     }
 
     // pipe -> input
+    // 创建一个子进程执行后半部分
     if(fork() == 0) {
         close(0);
         dup(p[0]);
@@ -129,12 +133,14 @@ ParseCmd(struct cmd *cmd, int cmd_size, char *buf, int buf_size) {
                     case '>':
                         x++;
                         while(*x && *x == ' ') *x++ = 0;
+                        // 指定输出对象
                         cmd[cmd_index].output = x;
                         while(*x && CharType(*x) == ORDINARY) x++;
                         break;
                     case '<':
                         x++;
                         while(*x && *x == ' ') *x++ = 0;
+                        // 指定输入对象
                         cmd[cmd_index].input = x;
                         while(*x && CharType(*x) == ORDINARY) x++;
                         break;

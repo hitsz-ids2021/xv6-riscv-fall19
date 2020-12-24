@@ -16,7 +16,7 @@ extern char end[]; // first address after kernel.
 struct run {
   struct run *next;
 };
-
+//将kalloc的共享freelist改为每个CPU独立的freelist
 struct {
   struct spinlock lock[NCPU];
   struct run *freelist[NCPU];
@@ -62,6 +62,7 @@ kfree(void *pa)
 
   r = (struct run*)pa;
 
+  //调用cpuid()获取相应的id，然后将被释放的块插入相应的free list
   acquire(&kmem.lock[id]);
   r->next = kmem.freelist[id];
   kmem.freelist[id] = r;
@@ -83,10 +84,11 @@ kalloc(void)
 
   acquire(&kmem.lock[id]);
   r = kmem.freelist[id];
+  //如果当前CPU的free list不为空，pop一个run出来，初始化后返回给调用者
   if(r)
     kmem.freelist[id] = r->next;
   release(&kmem.lock[id]);
-
+  //如果当前CPU对应的free list为空，则查询其它CPU对应的free list
   if(!r) {
     for(int i=0;i<NCPU;i++) {
       acquire(&kmem.lock[i]);

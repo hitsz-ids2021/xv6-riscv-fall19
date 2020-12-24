@@ -23,6 +23,7 @@
 #include "fs.h"
 #include "buf.h"
 
+//本质是一个双向循环链表
 struct {
   uint unused[NBUF];
   struct buf buf[NBUF];
@@ -37,7 +38,7 @@ void
 binit(void)
 {
   struct buf *b;
-
+  //将b插入在head的头部
   for (int i = 0; i < NBUCKET; i++)
   {
     bcache.bucket_head[i].prev = &bcache.bucket_head[i];
@@ -62,6 +63,7 @@ binit(void)
 // Look through buffer cache for block on device dev.
 // If not found, allocate a buffer.
 // In either case, return locked buffer.
+//修改源代码以支持哈希桶结构
 static struct buf*
 bget(uint dev, uint blockno)
 {
@@ -157,8 +159,10 @@ brelse(struct buf *b)
   b->refcnt--;
   if (b->refcnt == 0) {
     // no one is waiting for it.
+    //将b脱出
     b->next->prev = b->prev;
     b->prev->next = b->next;
+    //将b接入
     b->next = bcache.bucket_head[id].next;
     b->prev = &bcache.bucket_head[id];
     bcache.bucket_head[id].next->prev = b;

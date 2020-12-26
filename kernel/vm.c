@@ -20,27 +20,6 @@ extern char trampoline[]; // trampoline.S
 void print(pagetable_t);
 
 
-void _vmprint(pagetable_t pagetable, int lv) {
-  for(int i = 0; i < 512; i++){
-    pte_t pte = pagetable[i];
-    if (pte & PTE_V) {
-      for(int j=0; j <= lv; j++) {
-        printf(" ..");
-      }
-      uint64 next = PTE2PA(pte);
-      printf("%d: pte %p pa %p\n", i, (char *)(pte&~PTE_GUARD), (char *)next);
-      if (lv < 2)
-        _vmprint((pagetable_t)next, lv+1);
-    }
-  }
-}
-
-void vmprint(pagetable_t pagetable) {
-  printf("page table %p\n", (char *)pagetable);
-  _vmprint(pagetable, 0);
-}
-
-
 /*
  * create a direct-map page table for the kernel and
  * turn on paging. called early, in supervisor mode.
@@ -230,6 +209,7 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 size, int do_free)
   a = PGROUNDDOWN(va);
   last = PGROUNDDOWN(va + size - 1);
   for(;;){
+    //不再panic：假装无事发生
     if((pte = walk(pagetable, a, 0)) == 0)
       // panic("uvmunmap: walk");
       goto next_page;
@@ -252,6 +232,9 @@ next_page:
     pa += PGSIZE;
   }
 }
+
+
+
 
 // create an empty user page table.
 pagetable_t
@@ -371,6 +354,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
+    //修改了size，没有修改PTE：找不到对应的PTE
     if((pte = walk(old, i, 0)) == 0)
       // panic("uvmcopy: pte should exist");
       continue;
@@ -405,7 +389,7 @@ uvmclear(pagetable_t pagetable, uint64 va)
   if(pte == 0)
     panic("uvmclear");
   *pte &= ~PTE_U;
-  *pte |= PTE_GUARD;
+  *pte |= PTE_G;
 }
 
 int
@@ -415,7 +399,7 @@ uvmcheck_guard(pagetable_t pagetable, uint64 va) {
   pte = walk(pagetable, va, 0);
   if (pte == 0)
     return 0;
-  if (*pte & PTE_GUARD)
+  if (*pte & PTE_G)
     return 1;
   return 0;
 }

@@ -67,13 +67,15 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-    //在中间插入lazy page fault
   } else if(r_scause() == 13 || r_scause() == 15) {
+    //在中间插入lazy page fault
+    //page_fault对应13和15
 
     //虚拟地址：stack value
     uint64 va = r_stval();
 
-    //越界
+    //越界：虚拟地址大于size
+    //虽然分配是lazy的，但sz是即时增加的
     if (va >= p->sz) {
       p->killed = 1;
       goto stop_early;
@@ -84,23 +86,31 @@ usertrap(void)
       p->killed = 1;
       goto stop_early;
     }
-    
-    //page 4K对齐
-    uint64 a = PGROUNDDOWN(va);
+
+    //新分配一页并清零
     char *mem = kalloc();
+    
     if (mem == 0)
     {
       p->killed = 1;
       goto stop_early;
     }
     memset(mem, 0, PGSIZE);
+    
+    //虚拟地址要页对齐
+    //Use PGROUNDDOWN(va) to round the faulting virtual address down to a page boundary.
+    uint64 a = PGROUNDDOWN(va);
 
+    //It then initializes the PTE to hold the relevant physical page number,
+    //the desired permissions(PTE_W,PTE_X,and/or PTE_R), and PTE_V to mark the PTE as valid
+    //mappages : installs PTEs for new mappings
     if (mappages(p->pagetable, a, PGSIZE, (uint64)mem, PTE_W | PTE_X | PTE_R | PTE_U) != 0)
     {
       kfree(mem);
       p->killed = 1;
       goto stop_early;
     }
+
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());

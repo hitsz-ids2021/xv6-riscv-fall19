@@ -5,6 +5,8 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "proc.h"
 
 /*
  * the kernel's page table.
@@ -16,6 +18,28 @@ extern char etext[];  // kernel.ld sets this to end of kernel code.
 extern char trampoline[]; // trampoline.S
 
 void print(pagetable_t);
+
+
+void _vmprint(pagetable_t pagetable, int lv) {
+  for(int i = 0; i < 512; i++){
+    pte_t pte = pagetable[i];
+    if (pte & PTE_V) {
+      for(int j=0; j <= lv; j++) {
+        printf(" ..");
+      }
+      uint64 next = PTE2PA(pte);
+      printf("%d: pte %p pa %p\n", i, (char *)(pte&~PTE_GUARD), (char *)next);
+      if (lv < 2)
+        _vmprint((pagetable_t)next, lv+1);
+    }
+  }
+}
+
+void vmprint(pagetable_t pagetable) {
+  printf("page table %p\n", (char *)pagetable);
+  _vmprint(pagetable, 0);
+}
+
 
 /*
  * create a direct-map page table for the kernel and
@@ -99,24 +123,43 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
 // or 0 if not mapped.
 // Can only be used to look up user pages.
 uint64
-walkaddr(pagetable_t pagetable, uint64 va)
-{
+walkaddr(pagetable_t pagetable, uint64 va) {
   pte_t *pte;
   uint64 pa;
 
-  if(va >= MAXVA)
+  if (va >= MAXVA)
     return 0;
 
   pte = walk(pagetable, va, 0);
-  if(pte == 0)
-    return 0;
-  if((*pte & PTE_V) == 0)
-    return 0;
-  if((*pte & PTE_U) == 0)
+  if (pte == 0 || ((*pte & PTE_V) == 0))
+  {
+    if (va >= myproc()->sz)
+      return 0;
+
+    if (uvmcheck_guard(pagetable, va))
+      return 0;
+
+    uint64 a = PGROUNDDOWN(va);
+    char *mem = kalloc();
+    if (mem == 0)
+    {
+      return 0;
+    }
+    memset(mem, 0, PGSIZE);
+    if (mappages(pagetable, a, PGSIZE, (uint64)mem, PTE_W | PTE_X | PTE_R | PTE_U) != 0)
+    {
+      kfree(mem);
+      return 0;
+    }
+    pte = walk(pagetable, va, 0);
+  }
+
+  if ((*pte & PTE_U) == 0)
     return 0;
   pa = PTE2PA(*pte);
   return pa;
 }
+
 
 // add a mapping to the kernel page table.
 // only used when booting.
@@ -188,10 +231,11 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 size, int do_free)
   last = PGROUNDDOWN(va + size - 1);
   for(;;){
     if((pte = walk(pagetable, a, 0)) == 0)
-      panic("uvmunmap: walk");
+      // panic("uvmunmap: walk");
+      goto next_page;
     if((*pte & PTE_V) == 0){
-      printf("va=%p pte=%p\n", a, *pte);
-      panic("uvmunmap: not mapped");
+      // printf("uvmunmap: not mapped: va=%p pte=%p\n", a, *pte);
+      goto next_page;
     }
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
@@ -200,6 +244,8 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 size, int do_free)
       kfree((void*)pa);
     }
     *pte = 0;
+
+next_page:
     if(a == last)
       break;
     a += PGSIZE;
@@ -326,9 +372,11 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
-      panic("uvmcopy: pte should exist");
+      // panic("uvmcopy: pte should exist");
+      continue;
     if((*pte & PTE_V) == 0)
-      panic("uvmcopy: page not present");
+      // panic("uvmcopy: page not present");
+      continue;
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
     if((mem = kalloc()) == 0)
@@ -357,7 +405,22 @@ uvmclear(pagetable_t pagetable, uint64 va)
   if(pte == 0)
     panic("uvmclear");
   *pte &= ~PTE_U;
+  *pte |= PTE_GUARD;
 }
+
+int
+uvmcheck_guard(pagetable_t pagetable, uint64 va) {
+  pte_t *pte;
+
+  pte = walk(pagetable, va, 0);
+  if (pte == 0)
+    return 0;
+  if (*pte & PTE_GUARD)
+    return 1;
+  return 0;
+}
+
+
 
 // Copy from kernel to user.
 // Copy len bytes from src to virtual address dstva in a given page table.

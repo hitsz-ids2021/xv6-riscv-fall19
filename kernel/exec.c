@@ -9,6 +9,7 @@
 
 static int loadseg(pde_t *pgdir, uint64 addr, struct inode *ip, uint offset, uint sz);
 
+
 int
 exec(char *path, char **argv)
 {
@@ -112,6 +113,9 @@ exec(char *path, char **argv)
   p->tf->epc = elf.entry;  // initial program counter = main
   p->tf->sp = sp; // initial stack pointer
   proc_freepagetable(oldpagetable, oldsz);
+
+  //打印pagetable
+  vmprint(pagetable);
   return argc; // this ends up in a0, the first argument to main(argc, argv)
 
  bad:

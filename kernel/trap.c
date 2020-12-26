@@ -67,12 +67,47 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+    //在中间插入lazy page fault
+  } else if(r_scause() == 13 || r_scause() == 15) {
+
+    //虚拟地址：stack value
+    uint64 va = r_stval();
+
+    //越界
+    if (va >= p->sz) {
+      p->killed = 1;
+      goto stop_early;
+    }
+
+    //溢出，到达guard page
+    if (uvmcheck_guard(p->pagetable, va)) {
+      p->killed = 1;
+      goto stop_early;
+    }
+    
+    //page 4K对齐
+    uint64 a = PGROUNDDOWN(va);
+    char *mem = kalloc();
+    if (mem == 0)
+    {
+      p->killed = 1;
+      goto stop_early;
+    }
+    memset(mem, 0, PGSIZE);
+
+    if (mappages(p->pagetable, a, PGSIZE, (uint64)mem, PTE_W | PTE_X | PTE_R | PTE_U) != 0)
+    {
+      kfree(mem);
+      p->killed = 1;
+      goto stop_early;
+    }
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
   }
 
+stop_early:
   if(p->killed)
     exit(-1);
 
@@ -82,6 +117,9 @@ usertrap(void)
 
   usertrapret();
 }
+
+
+
 
 //
 // return to user space

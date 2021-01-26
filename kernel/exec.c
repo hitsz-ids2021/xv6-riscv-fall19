@@ -9,6 +9,31 @@
 
 static int loadseg(pde_t *pgdir, uint64 addr, struct inode *ip, uint offset, uint sz);
 
+void hierarchy_vmprint(pagetable_t pagetable, int level) {
+  //9bit对应2^9=512
+  for(int i = 0; i < 512; i++){
+    pte_t pte = pagetable[i];
+    //PTE_Valid 合法
+    if (pte & PTE_V) {
+      for(int j=0; j <= level; j++) {
+        printf(" ..");
+      }
+      //riscv.h的宏。将PTE转换成PA
+      uint64 next = PTE2PA(pte);
+      //这之后使用了额外的位PTE_G
+      printf("%d: pte %p pa %p\n", i, (char *)(pte&~PTE_G), (char *)next);
+      if (level < 2)
+        hierarchy_vmprint((pagetable_t)next, level+1);
+    }
+  }
+}
+
+void vmprint(pagetable_t pagetable) {
+  //%d十进制，%p十六进制
+  printf("page table %p\n", (char *)pagetable);
+  hierarchy_vmprint(pagetable, 0);
+}
+
 int
 exec(char *path, char **argv)
 {
@@ -112,6 +137,8 @@ exec(char *path, char **argv)
   p->tf->epc = elf.entry;  // initial program counter = main
   p->tf->sp = sp; // initial stack pointer
   proc_freepagetable(oldpagetable, oldsz);
+
+  vmprint(pagetable);
   return argc; // this ends up in a0, the first argument to main(argc, argv)
 
  bad:

@@ -416,7 +416,7 @@ class Runner():
             # Wait for QEMU to start or make to fail.  This will set
             # self.gdb if QEMU starts.
             self.qemu.on_output = [self.__monitor_start]
-            self.__react([self.qemu], timeout=30)
+            self.__react([self.qemu], timeout=90)
             self.qemu.on_output = []
             if self.gdb is None:
                 print("Failed to connect to QEMU; output:")
@@ -574,7 +574,7 @@ def shell_script(script, terminate_match=None):
         def handle_output(output):
             context.buf.extend(output)
             if terminate_match is not None:
-                if re.match(terminate_match, context.buf.decode('utf-8')):
+                if re.match(terminate_match, context.buf.decode('utf-8', 'replace')):
                     raise TerminateTest
             if b'$ ' in context.buf:
                 context.buf = bytearray()

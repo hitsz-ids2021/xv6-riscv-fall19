@@ -135,15 +135,15 @@ UPROGS=\
 	$U/_usertests\
 	$U/_wc\
 	$U/_zombie\
-	$U/_cow\
+	$U/_cowtest\
 	$U/_uthread\
 	$U/_call\
 	$U/_testsh\
 	$U/_kalloctest\
 	$U/_bcachetest\
-	$U/_mounttest\
-	$U/_crashtest\
 	$U/_alloctest\
+	$U/_bigfile\
+	$U/_nsh\
 
 fs.img: mkfs/mkfs README user/xargstest.sh $(UPROGS)
 	mkfs/mkfs fs.img README user/xargstest.sh $(UPROGS)
@@ -165,12 +165,11 @@ QEMUGDB = $(shell if $(QEMU) -help | grep -q '^-gdb'; \
 	then echo "-gdb tcp::$(GDBPORT)"; \
 	else echo "-s -p $(GDBPORT)"; fi)
 ifndef CPUS
-CPUS := 3
+CPUS := 1
 endif
 
-QEMUEXTRA = -drive file=fs1.img,if=none,format=raw,id=x1 -device virtio-blk-device,drive=x1,bus=virtio-mmio-bus.1
-
-QEMUOPTS = -machine virt -kernel $K/kernel -m 3G -smp $(CPUS) -nographic
+QEMUEXTRA = 
+QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 128M -smp $(CPUS) -nographic
 QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 
 qemu: $K/kernel fs.img
@@ -180,7 +179,7 @@ qemu: $K/kernel fs.img
 	sed "s/:1234/:$(GDBPORT)/" < $^ > $@
 
 qemu-gdb: $K/kernel .gdbinit fs.img
-	@echo "*** Now run 'gdb'." 1>&2
+	@echo "*** Now run 'gdb' in another window." 1>&2
 	$(QEMU) $(QEMUOPTS) -S $(QEMUGDB)
 
 
@@ -237,6 +236,9 @@ handin-check:
 
 UPSTREAM := $(shell git remote -v | grep -m 1 "mit-pdos/xv6-riscv-fall19" | awk '{split($$0,a," "); print a[1]}')
 
+tarball: handin-check
+	git archive --format=tar HEAD | gzip > lab-$(LAB)-handin.tar.gz
+
 tarball-pref: handin-check
 	@SUF=$(LAB); \
 	git archive --format=tar HEAD > lab-$$SUF-handin.tar; \
@@ -265,4 +267,4 @@ myapi.key:
 	fi;
 
 
-.PHONY: handin tarball-pref clean grade handin-check
+.PHONY: handin tarball tarball-pref clean grade handin-check

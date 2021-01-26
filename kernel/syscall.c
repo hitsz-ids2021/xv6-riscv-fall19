@@ -20,7 +20,6 @@ fetchaddr(uint64 addr, uint64 *ip)
 }
 
 // Fetch the nul-terminated string at addr from the current process.
-// Doesn't actually copy the string - just sets *pp to point at it.
 // Returns length of string, not including nul, or -1 for error.
 int
 fetchstr(uint64 addr, char *buf, int max)
@@ -106,7 +105,6 @@ extern uint64 sys_wait(void);
 extern uint64 sys_write(void);
 extern uint64 sys_uptime(void);
 extern uint64 sys_ntas(void);
-extern uint64 sys_crash(void);
 
 static uint64 (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -131,7 +129,6 @@ static uint64 (*syscalls[])(void) = {
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
 [SYS_ntas]    sys_ntas,
-[SYS_crash]   sys_crash,
 };
 
 void
